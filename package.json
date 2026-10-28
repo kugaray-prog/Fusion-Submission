@@ -1,0 +1,46 @@
+{
+  "name": "geoattend-pro",
+  "version": "1.0.0",
+  "description": "GeoAttend - Geofenced Attendance Monitoring System with OCR and Face Identity Verification",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "seed": "node database/seed.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "express-session": "^1.18.0",
+    "google-auth-library": "^9.14.1",
+    "helmet": "^7.1.0",
+    "json2csv": "^6.0.0-alpha.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.11.3",
+    "nodemailer": "^10.0.16",
+    "onnxruntime-node": "^1.19.2",
+    "pdfkit": "^0.15.0",
+    "sharp": "^0.33.5",
+    "tesseract.js": "^5.1.1",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "allowScripts": {
+    "bcrypt@5.1.1": true,
+    "tesseract.js@5.1.1": true,
+    "onnxruntime-node@1.29.0": true,
+    "sharp@0.33.5": true
+  }
+}

@@ -1,0 +1,49 @@
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# --- Dependencies ---
+node_modules/
+mobile/node_modules/
+
+# --- Face recognition models (large binaries) ---
+# Optional buffalo_l models (too large for GitHub)
+models/det_10g.onnx
+models/w600k_r50.onnx
+
+# Runtime uploads (folders kept via .gitkeep)
+uploads/*/*
+!uploads/*/.gitkeep
+uploads/.sync-state.json
+
+# --- Logs ---
+*.log
+npm-debug.log*
+
+# --- OS / editor noise ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Expo / React Native (mobile/) ---
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/*.jks
+mobile/*.p8
+mobile/*.p12
+mobile/*.key
+mobile/*.mobileprovision
+mobile/*.orig.*
+mobile/.metro-health-check*
+mobile/ios/
+mobile/android/
+
+# --- Stray folder from an unexpanded Windows %ProgramData% path ---
+mobile/%ProgramData%/
+
+# Local-only APK builds served for phone download
+public/downloads/

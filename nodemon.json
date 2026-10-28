@@ -1,0 +1,11 @@
+{
+  "ignore": [
+    "mobile/",
+    "uploads/",
+    "public/",
+    "views/",
+    "models/",
+    "*.md",
+    "*.log"
+  ]
+}

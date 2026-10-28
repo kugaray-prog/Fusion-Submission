@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CSPC GeoAttend</title>
+<link rel="icon" type="image/png" href="/img/favicon.png">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+    --cspc-blue: #0A1D56;
+    --cspc-blue-light: #162C72;
+    --cspc-gold: #FFD700;
+    --success: #10B981;
+    --error: #ef4444;
+    --bg: #F8FAFC;
+    --white: #ffffff;
+    --text-main: #0F172A;
+    --text-sub: #64748B;
+    --border: #E2E8F0;
+    --radius-lg: 24px;
+    --radius-md: 16px;
+    --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+.hidden { display: none !important; }
+
+body {
+    background: #020617;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.phone {
+    width: 390px;
+    height: 844px;
+    background: var(--bg);
+    border-radius: 44px;
+    border: 10px solid #1e293b;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 50px 100px -20px rgba(0,0,0,0.7);
+    /* On any viewport smaller than the mockup itself, scale it down as a
+       whole (design/proportions untouched) instead of letting it clip. The
+       exact factor is computed in the inline script below since it depends
+       on both viewport width AND height. */
+    transform-origin: center center;
+}
+
+/* Status Bar */
+.status-bar {
+    padding: 16px 24px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--white);
+    font-size: 14px;
+    font-weight: 700;
+    z-index: 100;
+}
+
+/* Screen Logic */
+.screens { flex: 1; position: relative; overflow: hidden; }
+.screen {
+    position: absolute;
+    inset: 0;
+    padding: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(20px);
+    transition: all 0.4s cubic-bezier(0.17, 0.67, 0.83, 0.67);
+    overflow-y: auto;
+}
+.screen.active { opacity: 1; pointer-events: all; transform: translateY(0); }
+
+/* Branding */
+.brand-section {
+    background: var(--cspc-blue);
+    padding: 50px 24px;
+    border-radius: 0 0 32px 32px;
+    color: white;
+    text-align: center;
+    margin: -20px -20px 24px;
+}
+.logo-container {
+    width: 85px; height: 85px;
+    background: white; border-radius: 50%;
+    margin: 0 auto 16px; padding: 10px;
+    border: 3px solid var(--cspc-gold);
+}
+.logo-container img { width: 100%; object-fit: contain; }
+
+/* Cards & Forms */
+.card {
+    background: white;
+    padding: 18px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+}
+
+.input-group { margin-bottom: 12px; text-align: left; }
+.input-group label { display: block; font-size: 10px; font-weight: 800; color: var(--cspc-blue); margin-bottom: 4px; text-transform: uppercase; }
+.input-group input, .input-group select {
+    width: 100%; padding: 12px; border: 2px solid var(--border); border-radius: 10px; font-size: 14px;
+}
+
+/* Buttons */
+.btn {
+    width: 100%; padding: 16px; border: none; border-radius: 14px;
+    font-size: 15px; font-weight: 700; cursor: pointer; transition: 0.2s;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+.btn-primary { background: var(--cspc-blue); color: white; }
+.btn-gold { background: var(--cspc-gold); color: var(--cspc-blue); }
+.btn-outline { background: transparent; border: 2px solid var(--cspc-blue); color: var(--cspc-blue); }
+.btn-binding { background: #435585; color: white; }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.google-btn {
+    display: flex; align-items: center; justify-content: center;
+    gap: 12px; background: white; border: 1px solid var(--border);
+    padding: 16px; border-radius: 12px; width: 100%; font-weight: 600; cursor: pointer;
+}
+
+/* Event List Styling */
+.section-title {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--cspc-blue);
+    margin: 20px 0 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    justify-content: space-between;
+}
+.event-item, .log-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 0; border-bottom: 1px solid #f1f5f9;
+}
+.event-item:last-child { border-bottom: none; }
+.event-info h4 { font-size: 13px; color: var(--text-main); margin-bottom: 2px; }
+.event-info p { font-size: 11px; color: var(--text-sub); }
+
+.status-pill { font-size: 9px; font-weight: 800; padding: 4px 8px; border-radius: 6px; background: #f1f5f9; text-transform: uppercase; }
+.status-pill.waiting { background: #fef3c7; color: #92400e; }
+.status-pill.soon { background: #e0e7ff; color: #3730a3; }
+.status-pill.success { background: #d1fae5; color: #065f46; }
+.status-pill.danger { background: #fee2e2; color: #991b1b; }
+
+/* Navigation */
+.bottom-nav {
+    background: var(--white); display: none; justify-content: space-around;
+    padding: 12px 10px 32px; border-top: 1px solid var(--border);
+}
+.nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--text-sub); font-size: 10px; font-weight: 700; cursor: pointer; }
+.nav-item.active { color: var(--cspc-blue); }
+.ico { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
+/* Overlays */
+.overlay {
+    position: absolute; inset: 0; background: rgba(10, 29, 86, 0.98);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 1000; color: white; text-align: center; padding: 40px;
+}
+
+/* Face Registration — live camera + liveness challenge (mirrors the admin
+   dashboard's Face Verification UI, restyled to the mobile theme) */
+.face-cam-wrap {
+    position: relative; width: 100%; height: 320px; background: #000;
+    border-radius: var(--radius-md); overflow: hidden; margin-bottom: 14px;
+}
+.face-cam-wrap video { width: 100%; height: 100%; object-fit: cover; }
+.face-guide-ring {
+    position: absolute; top: 30px; bottom: 60px; left: 18%; right: 18%;
+    border: 2px solid rgba(255,255,255,0.4); border-radius: 50%; pointer-events: none;
+}
+.face-cam-label {
+    position: absolute; top: 14px; left: 0; right: 0; text-align: center;
+    color: rgba(255,255,255,0.85); font-size: 11px; font-weight: 800;
+    letter-spacing: 0.05em; pointer-events: none;
+}
+.face-liveness-banner {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 16px 16px;
+    text-align: center; background: linear-gradient(0deg, rgba(0,0,0,0.75), rgba(0,0,0,0));
+    color: white;
+}
+.face-liveness-instruction { font-size: 13px; font-weight: 800; margin-bottom: 8px; }
+.face-liveness-dots { display: flex; justify-content: center; gap: 7px; }
+.face-liveness-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,0.35); transition: 0.3s; }
+.face-liveness-dot.done { background: var(--success); }
+.face-liveness-dot.active { background: var(--cspc-gold); box-shadow: 0 0 8px var(--cspc-gold); }
+</style>
+</head>
+<body>
+
+<div class="phone">
+    <!-- Global Overlay -->
+    <div class="overlay" id="globalOverlay">
+        <h2 id="overlayTitle">Processing...</h2>
+        <p id="overlaySub">Please wait…</p>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <span id="clock">12:00</span>
+        <span style="color:var(--text-sub); font-size: 10px; font-weight:700; letter-spacing: 0.04em;">CSPC GEOATTEND</span>
+    </div>
+
+    <div class="screens">
+        <!-- 1. LOGIN SCREEN -->
+        <div class="screen active" id="screen-login">
+            <div class="brand-section">
+                <div class="logo-container">
+                    <img src="/img/cspc-logo.png" alt="CSPC Logo">
+                </div>
+                <h2>CSPC GeoAttend</h2>
+                <p style="font-size: 12px; opacity: 0.8;">Institutional Identity Access</p>
+            </div>
+            <div class="card" style="margin-top: -40px; text-align: center;">
+                <p style="margin-bottom: 25px; color: var(--text-sub); font-size: 14px;">Sign in with your official CSPC Google Account.</p>
+                <button class="google-btn" id="btn-google-login" onclick="handleGoogleClick()">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google" width="20">
+                    Continue with Google
+                </button>
+                <div id="g_id_signin_proxy" style="position: absolute; opacity: 0; pointer-events: none; top: -9999px;"></div>
+                <p id="login-error" style="color: var(--error); font-size: 12px; margin-top: 12px; min-height: 16px;"></p>
+            </div>
+        </div>
+
+        <!-- 1.5 POST-LOGIN CHOICE -->
+        <div class="screen" id="screen-choice">
+            <div style="text-align: center; margin-top: 40px;">
+                <h2 style="color: var(--cspc-blue); font-weight: 800;">Authenticated!</h2>
+                <p style="color: var(--text-sub); margin-bottom: 40px;">What would you like to do next?</p>
+
+                <div class="card" style="padding: 30px 20px;">
+                    <button class="btn btn-primary" onclick="switchScreen('register')">
+                        <svg class="ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg> Register this Device
+                    </button>
+                    <p style="font-size: 11px; color: var(--text-sub); margin-bottom: 20px;">Required for first-time setup or new device.</p>
+
+                    <div style="border-top: 1px solid var(--border); margin: 20px 0;"></div>
+
+                    <button class="btn btn-outline" onclick="skipToHome()">
+                        <svg class="ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg> Log my Attendance
+                    </button>
+                    <p style="font-size: 11px; color: var(--text-sub);">Direct to dashboard (Registered users only).</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. REGISTRATION FORM -->
+        <div class="screen" id="screen-register">
+            <h2 style="font-weight: 800; color: var(--cspc-blue);">Device Registration</h2>
+            <p style="color: var(--text-sub); margin-bottom: 15px; font-size: 13px;">Manual input required for device binding.</p>
+            <div class="card">
+                <div class="input-group"><label>Last Name</label><input type="text" id="reg-lname" placeholder="Dela Cruz"></div>
+                <div class="input-group"><label>First Name</label><input type="text" id="reg-fname" placeholder="Juan"></div>
+                <div class="input-group"><label>Middle Name</label><input type="text" id="reg-mname" placeholder="Santos"></div>
+                <div class="input-group">
+                    <label>Suffix</label>
+                    <select id="reg-suffix">
+                        <option value="">None</option>
+                        <option value="Jr.">Jr.</option>
+                        <option value="Sr.">Sr.</option>
+                        <option value="II">II</option>
+                        <option value="III">III</option>
+                        <option value="IV">IV</option>
+                        <option value="V">V</option>
+                    </select>
+                </div>
+                <div class="input-group"><label>Employee ID</label><input type="text" id="reg-empid" placeholder="e.g. E001"></div>
+                <div class="input-group">
+                    <label>Department</label>
+                    <select id="reg-dept"><option value="">Loading departments…</option></select>
+                </div>
+                <div class="input-group"><label>Position</label><input type="text" id="reg-position" placeholder="e.g. Instructor, Administrative Aide"></div>
+                <div class="input-group">
+                    <label>Gender</label>
+                    <select id="reg-gender" onchange="document.getElementById('reg-gender-other').style.display = this.value === 'Others' ? 'block' : 'none';">
+                        <option value="">Select gender</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Others">Others</option>
+                    </select>
+                    <input type="text" id="reg-gender-other" placeholder="Please specify" style="display:none; margin-top:8px;">
+                </div>
+                <div class="input-group">
+                    <label>Classification</label>
+                    <select id="reg-classification" onchange="document.getElementById('reg-classification-other').style.display = this.value === 'Others' ? 'block' : 'none';">
+                        <option value="">Select classification</option>
+                        <option value="Permanent Administrative">Permanent Administrative</option>
+                        <option value="Permanent Academic">Permanent Academic</option>
+                        <option value="Casual Administrative">Casual Administrative</option>
+                        <option value="COS Administrative">COS Administrative</option>
+                        <option value="COS Academic">COS Academic</option>
+                        <option value="Job Order">Job Order</option>
+                        <option value="Others">Others</option>
+                    </select>
+                    <input type="text" id="reg-classification-other" placeholder="Please specify" style="display:none; margin-top:8px;">
+                </div>
+            </div>
+
+            <!-- Device Info Section -->
+            <div class="card" style="background: #E8EEF5; margin: 15px 0;">
+                <p id="reg-device-info" style="font-family: monospace; font-size: 12px; line-height: 1.5;">
+                    Detecting device...
+                </p>
+            </div>
+
+            <p id="register-error" style="color: var(--error); font-size: 12px; margin-bottom: 8px; min-height: 16px;"></p>
+            <button class="btn btn-binding" id="btn-confirm-binding" onclick="goToFaceRegistration()">Continue to Face Registration</button>
+        </div>
+
+        <!-- 3. FACE REGISTRATION (live selfie + liveness challenge) -->
+        <div class="screen" id="screen-face">
+            <h2 style="font-weight: 800; color: var(--cspc-blue);">Face Registration</h2>
+            <p style="color: var(--text-sub); margin-bottom: 15px; font-size: 13px;">This photo becomes your permanent enrolled face for Face Verification. A quick liveness check runs first.</p>
+            <div class="face-cam-wrap">
+                <video id="face-reg-video" autoplay playsinline muted></video>
+                <canvas id="face-reg-canvas" class="hidden"></canvas>
+                <div class="face-guide-ring" id="face-reg-guide"></div>
+                <div class="face-cam-label" id="face-reg-idle-label">Center your face within the frame</div>
+                <div class="face-liveness-banner hidden" id="face-reg-liveness-banner">
+                    <div class="face-liveness-instruction" id="face-reg-instruction">Get ready…</div>
+                    <div class="face-liveness-dots" id="face-reg-dots"></div>
+                </div>
+            </div>
+            <p id="face-reg-error" style="color: var(--error); font-size: 12px; margin-bottom: 8px; min-height: 16px;"></p>
+            <button class="btn btn-outline" style="margin-bottom: 10px;" onclick="stopFaceRegCamera(); switchScreen('register');">Back</button>
+            <button class="btn btn-binding" id="btn-start-face-reg" onclick="startFaceRegistration()">Start Face Registration</button>
+        </div>
+
+        <!-- 4. HOME DASHBOARD -->
+        <div class="screen" id="screen-home">
+            <div style="margin-bottom: 20px;">
+                <h3 id="welcome-text" style="font-size: 22px; font-weight: 800;">Welcome!</h3>
+                <p style="font-size: 12px; color: var(--text-sub);">Geofence Status: <span id="geofence-status-text" style="color:var(--success); font-weight:700;">CHECKING…</span></p>
+            </div>
+
+            <!-- Active Check-In Card -->
+            <div class="card" id="attendance-card" style="background: linear-gradient(135deg, var(--cspc-blue), #1e3a8a); color: white; border: none; padding: 20px;">
+                <p style="font-size: 9px; font-weight: 800; color: var(--cspc-gold); letter-spacing: 1px; text-transform: uppercase;" id="attendance-card-label">Ongoing Now</p>
+                <h2 id="current-event-name" style="margin: 5px 0; font-size: 18px;">No active event</h2>
+                <p style="font-size: 11px; opacity: 0.8; display: flex; align-items: center; gap: 4px;"><svg class="ico" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><span id="current-event-venue">--</span></p>
+                <button class="btn btn-gold" id="btn-checkin" onclick="handleAttendance()" style="margin-top: 15px; padding: 12px;" disabled>No Active Event</button>
+            </div>
+
+            <!-- Today's Schedule -->
+            <div class="section-title">Today's Schedule <span id="today-date-label"></span></div>
+            <div class="card" style="padding: 5px 15px;">
+                <div id="today-schedule-list"><div class="event-item"><div class="event-info"><p>Loading…</p></div></div></div>
+            </div>
+
+            <!-- Upcoming Events -->
+            <div class="section-title">Upcoming</div>
+            <div class="card" style="padding: 5px 15px;">
+                <div id="upcoming-events-list"><div class="event-item"><div class="event-info"><p>Loading…</p></div></div></div>
+            </div>
+        </div>
+
+        <!-- 5. LOGS SCREEN -->
+        <div class="screen" id="screen-logs">
+            <h2 style="font-weight: 800;">Attendance Logs</h2>
+            <div id="logs-container" style="margin-top: 20px;"></div>
+        </div>
+
+        <!-- 6. PROFILE SCREEN -->
+        <div class="screen" id="screen-profile">
+            <h2 style="font-weight: 800;">My Profile</h2>
+            <div class="card" id="profile-card"></div>
+            <button class="btn" style="background: #fee2e2; color: var(--error);" onclick="handleLogout()">Logout from Device</button>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav" id="bottomNav">
+        <div class="nav-item active" onclick="switchScreen('home')"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg><span>Home</span></div>
+        <div class="nav-item" onclick="switchScreen('logs')"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/></svg><span>Logs</span></div>
+        <div class="nav-item" onclick="switchScreen('profile')"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></div>
+    </div>
+</div>
+
+<script>
+    window.__GOOGLE_CLIENT_ID__ = "<%= googleClientId %>";
+    window.__API_BASE__ = "/api";
+</script>
+<script>
+    // Scale the 390x844 phone layout to fit the viewport.
+    (function () {
+        var PHONE_W = 390, PHONE_H = 844, MARGIN = 24;
+        function fitPhone() {
+            var phone = document.querySelector('.phone');
+            if (!phone) return;
+            var scale = Math.min(
+                (window.innerWidth - MARGIN) / PHONE_W,
+                (window.innerHeight - MARGIN) / PHONE_H,
+                1
+            );
+            phone.style.transform = scale < 1 ? 'scale(' + scale + ')' : 'none';
+        }
+        window.addEventListener('resize', fitPhone);
+        window.addEventListener('orientationchange', fitPhone);
+        fitPhone();
+    })();
+</script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="/js/mobile-app.js"></script>
+</body>
+</html>
