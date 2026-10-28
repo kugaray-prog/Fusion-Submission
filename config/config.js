@@ -69,7 +69,7 @@ module.exports = {
       : 30,
     // Geo-anomaly: two phones within anomalyDistanceMeters for anomalyMinMatches
     // paired readings over anomalySustainSeconds are both flagged for face verification.
-    anomalyDistanceMeters: Number(process.env.ANOMALY_DISTANCE_METERS) || 0.5,
+    anomalyDistanceMeters: Number(process.env.ANOMALY_DISTANCE_METERS) || 1,
     anomalyWindowSeconds: Number(process.env.ANOMALY_WINDOW_SECONDS) || 30,
     anomalyRecheckSeconds: Number(process.env.ANOMALY_RECHECK_SECONDS) || 30,
     anomalyPairSeconds: Number(process.env.ANOMALY_PAIR_SECONDS) || 6,

@@ -11,7 +11,7 @@ export const isGoogleConfigured = () =>
   !!GOOGLE_WEB_CLIENT_ID && !GOOGLE_WEB_CLIENT_ID.startsWith('your_');
 
 // Set extra.apiBaseUrl in app.json (LAN IP or deployed URL).
-export const API_BASE_URL = extra.apiBaseUrl || 'http://172.16.81.79:3000/api';
+export const API_BASE_URL = extra.apiBaseUrl || 'http://172.16.81.79:2620/api';
 
 // Server root for /uploads URLs.
 export const ASSET_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, '');

@@ -24,7 +24,7 @@
 
    docker compose run --rm tunnel login
 
-6. Buksan ang website: http://localhost:3000
+6. Buksan ang website: http://localhost:2620
 
 7. Mobile app: ipakita ang QR code at i-scan ito gamit ang Expo Go. Dapat nasa iisang Wi-Fi ang phone at ang PC.
 
@@ -34,7 +34,7 @@
 
 1. Buksan ang Docker Desktop.
 2. docker compose up -d
-3. Buksan ang http://localhost:3000. Para sa phone, i-scan ulit ang QR (docker compose logs expo --tail 60).
+3. Buksan ang http://localhost:2620. Para sa phone, i-scan ulit ang QR (docker compose logs expo --tail 60).
 
 Hindi na kailangang mag-seed o mag-build ulit.
 

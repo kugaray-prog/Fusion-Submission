@@ -14,7 +14,7 @@
     "local": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "API_BASE_URL": "http://192.168.254.107:3000/api" }
+      "env": { "API_BASE_URL": "http://192.168.254.107:2620/api" }
     },
     "production": {
       "autoIncrement": true

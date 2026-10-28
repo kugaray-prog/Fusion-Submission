@@ -26,7 +26,7 @@ process.on('uncaughtException', (err) => {
 });
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 2620;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 console.log(`Environment: ${NODE_ENV}`);

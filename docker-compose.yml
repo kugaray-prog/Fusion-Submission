@@ -34,10 +34,10 @@ services:
       DB_USER: root
       DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-geoattend_root}
       DB_NAME: geoattend_pro
-      PORT: 3000
+      PORT: 2620
       TZ: Asia/Manila
     ports:
-      - "3000:3000"
+      - "2620:2620"
     # -L: poll for changes (Windows file events don't reach the container).
     command: ["nodemon", "-L", "server.js"]
     volumes:
@@ -57,7 +57,7 @@ services:
       REACT_NATIVE_PACKAGER_HOSTNAME: ${HOST_LAN_IP:?Set HOST_LAN_IP in .env to this PC's Wi-Fi IPv4 (ipconfig)}
       # Google Sign-In needs an https:// origin (Google rejects http://<LAN IP>
       # with redirect_uri_mismatch), so prefer the HTTPS tunnel when set.
-      API_BASE_URL: ${MOBILE_API_BASE_URL:-http://${HOST_LAN_IP}:3000/api}
+      API_BASE_URL: ${MOBILE_API_BASE_URL:-http://${HOST_LAN_IP}:2620/api}
       EXPO_NO_TELEMETRY: "1"
       # Optional: skips Expo's login prompt.
       EXPO_TOKEN: ${EXPO_TOKEN:-}
@@ -95,7 +95,7 @@ services:
       dockerfile: Dockerfile.apk
     profiles: ["apk"]
     environment:
-      API_BASE_URL: ${MOBILE_API_BASE_URL:-http://${HOST_LAN_IP}:3000/api}
+      API_BASE_URL: ${MOBILE_API_BASE_URL:-http://${HOST_LAN_IP}:2620/api}
       APK_NAME: ${APK_NAME:-GeoAttend.apk}
       APK_ARCHS: ${APK_ARCHS:-arm64-v8a}
       EXPO_NO_TELEMETRY: "1"

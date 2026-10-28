@@ -23,9 +23,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NODE_ENV=production
-EXPOSE 3000
+EXPOSE 2620
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:${PORT:-3000}/api/health || exit 1
+  CMD curl -f http://localhost:${PORT:-2620}/api/health || exit 1
 
 CMD ["node", "server.js"]

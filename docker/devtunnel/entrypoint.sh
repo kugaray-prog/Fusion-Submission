@@ -1,5 +1,5 @@
 #!/bin/sh
-# Hosts DEVTUNNEL_ID and forwards it to the app's port 3000.
+# Hosts DEVTUNNEL_ID and forwards it to the app's port 2620.
 set -e
 
 # Keyring keeps the login token. Daemon output goes to files: $(...) would hang.
@@ -24,6 +24,8 @@ if devtunnel user show 2>&1 | grep -q "Logged in"; then
         || echo "Dev Tunnels: could not renew the 30-day expiration (will retry)."
       sleep 86400
     done ) &
+  # Make sure the tunnel forwards the app's port (no-op if it already does).
+  devtunnel port create "$DEVTUNNEL_ID" -p 2620 >/dev/null 2>&1 || true
   exec devtunnel host "$DEVTUNNEL_ID"
 fi
 echo "Dev Tunnels: not logged in. Run: docker compose run --rm tunnel login"
