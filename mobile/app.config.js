@@ -5,14 +5,13 @@ module.exports = ({ config }) => {
 
   return {
     ...config,
-    name: `${config.name} (Local)`,
     extra: { ...config.extra, apiBaseUrl },
     ios: {
       ...config.ios,
       infoPlist: {
         ...config.ios?.infoPlist,
         NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
-        NSLocalNetworkUsageDescription: 'GeoAttend (Local) connects to the GeoAttend server on this network.',
+        NSLocalNetworkUsageDescription: 'GeoAttend connects to the GeoAttend server on this network.',
       },
     },
     plugins: [

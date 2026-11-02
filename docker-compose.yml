@@ -94,6 +94,8 @@ services:
       context: ./mobile
       dockerfile: Dockerfile.apk
     profiles: ["apk"]
+    # Few cores keeps ninja's parallel clang jobs inside Docker's small RAM.
+    cpuset: "0-1"
     environment:
       API_BASE_URL: ${MOBILE_API_BASE_URL:-http://${HOST_LAN_IP}:2620/api}
       APK_NAME: ${APK_NAME:-GeoAttend.apk}

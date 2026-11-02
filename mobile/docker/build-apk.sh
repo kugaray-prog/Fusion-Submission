@@ -3,7 +3,7 @@
 set -euo pipefail
 
 : "${API_BASE_URL:?API_BASE_URL is not set (set HOST_LAN_IP in .env)}"
-APK_NAME="${APK_NAME:-GeoAttend-Local.apk}"
+APK_NAME="${APK_NAME:-GeoAttend.apk}"
 APK_ARCHS="${APK_ARCHS:-arm64-v8a}"
 export CI=1 NODE_ENV=production
 
@@ -41,6 +41,10 @@ sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSi
 # Leading \n: the generated file has no trailing newline, and gluing onto its
 # last line (expo.inlineModules.watchedDirectories=[]) breaks Expo's build.
 printf '\nkotlin.compiler.execution.strategy=in-process\n' >> android/gradle.properties
+# Expo's template turns on R8 for release builds; it strips classes that
+# Nitro/VisionCamera load from native code, so the app closes on launch.
+sed -i 's/^android.enableMinifyInReleaseBuilds=.*/android.enableMinifyInReleaseBuilds=false/' android/gradle.properties
+sed -i 's/^android.enableShrinkResourcesInReleaseBuilds=.*/android.enableShrinkResourcesInReleaseBuilds=false/' android/gradle.properties
 
 echo "==> Building the APK ($APK_ARCHS) -- the first build takes a long time"
 cd android
