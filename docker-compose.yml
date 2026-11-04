@@ -8,7 +8,7 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-geoattend_root}
-      MYSQL_DATABASE: geoattend_pro
+      MYSQL_DATABASE: geoattend
       TZ: Asia/Manila
     command: --default-time-zone=+08:00
     volumes:
@@ -33,7 +33,7 @@ services:
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-geoattend_root}
-      DB_NAME: geoattend_pro
+      DB_NAME: geoattend
       PORT: 2620
       TZ: Asia/Manila
     ports:

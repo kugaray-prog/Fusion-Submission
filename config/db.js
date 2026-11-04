@@ -7,7 +7,7 @@ const pool = mysql.createPool({
   port: process.env.DB_PORT || 3307,
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || 'geoattend_root',
-  database: process.env.DB_NAME || 'geoattend_pro',
+  database: process.env.DB_NAME || 'geoattend',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
