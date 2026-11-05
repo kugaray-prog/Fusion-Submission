@@ -132,7 +132,7 @@ async function flagAttendanceForVerification({ attendanceId, employeeId, eventId
 // Geo-anomaly detection: flags both records when two employees' phones stay
 // together (see colocatedRecords). Verified records are re-checked after
 // anomalyRecheckSeconds.
-// attendanceId -> { eventId, employeeId, points: [{ lat, lng, accuracy, at }] }
+// attendanceId -> { eventId, employeeId, points: [{ lat, lng, accuracy, at }], box }
 const recentPositions = new Map();
 let recentPositionsSweptAt = 0;
 
@@ -152,6 +152,7 @@ function rememberPosition({ attendanceId, eventId, employeeId, latitude, longitu
   const entry = recentPositions.get(String(attendanceId)) || { eventId, employeeId, points: [] };
   entry.points = entry.points.filter((p) => p.at >= cutoff);
   entry.points.push({ lat, lng, accuracy: Number.isFinite(acc) && acc > 0 ? acc : null, at: now });
+  entry.box = boundingBox(entry.points.filter(preciseEnough));
   recentPositions.set(String(attendanceId), entry);
   if (now - recentPositionsSweptAt > 10000) {
     recentPositionsSweptAt = now;
@@ -159,6 +160,29 @@ function rememberPosition({ attendanceId, eventId, employeeId, latitude, longitu
       if (!e.points.some((p) => p.at >= cutoff)) recentPositions.delete(id);
     }
   }
+}
+
+// Lat/lng bounds of a trail, or null when empty.
+function boundingBox(points) {
+  if (!points.length) return null;
+  const box = { minLat: Infinity, maxLat: -Infinity, minLng: Infinity, maxLng: -Infinity };
+  for (const p of points) {
+    box.minLat = Math.min(box.minLat, p.lat);
+    box.maxLat = Math.max(box.maxLat, p.lat);
+    box.minLng = Math.min(box.minLng, p.lng);
+    box.maxLng = Math.max(box.maxLng, p.lng);
+  }
+  return box;
+}
+
+// Whether two trails' bounds come within `meters` of each other. A cheap
+// pre-filter: trails that fail it can't have a pair of readings that close.
+// (110 km per degree errs on the generous side.)
+function boxesNear(a, b, meters) {
+  const dLat = meters / 110000;
+  const dLng = meters / (110000 * Math.cos((a.minLat * Math.PI) / 180));
+  return a.minLat - dLat <= b.maxLat && b.minLat - dLat <= a.maxLat &&
+    a.minLng - dLng <= b.maxLng && b.minLng - dLng <= a.maxLng;
 }
 
 // A reading too coarse to tell two phones apart says nothing either way.
@@ -198,12 +222,15 @@ function togetherRun(mine, theirs, cutoff) {
 function colocatedRecords(attendanceId) {
   const matches = new Map();
   const self = recentPositions.get(String(attendanceId));
-  if (!self) return matches;
+  if (!self || !self.box) return matches;
   const a = config.attendance;
   const now = Date.now();
   const cutoff = now - trailKeepMs();
   for (const [id, e] of recentPositions) {
     if (id === String(attendanceId) || String(e.eventId) !== String(self.eventId) || String(e.employeeId) === String(self.employeeId)) continue;
+    // Checked before the full comparison: with a whole crowd at one event,
+    // comparing every trail on every heartbeat is the expensive part.
+    if (!e.box || !boxesNear(self.box, e.box, a.anomalyDistanceMeters)) continue;
     const run = togetherRun(self.points, e.points, cutoff);
     if (run &&
         run.count >= a.anomalyMinMatches &&
@@ -1046,6 +1073,9 @@ async function faceVerify(req, res, next) {
     try {
       embedding = await faceService.getEmbedding(selfieFile.path);
     } catch (err) {
+      if (faceService.isBusyError(err)) {
+        return res.status(503).json({ success: false, result: 'server_busy', message: err.message });
+      }
       await recordAttempt('no_face_detected');
       return res.status(502).json({
         success: false,
@@ -1402,29 +1432,47 @@ async function closeSilentSessions() {
 }
 
 // Reopens a no_signal time-out when the phone reports it stayed inside the
-// whole time it was offline (offline_inside_seconds). Only while the event runs,
-// the record isn't flagged, and nothing was recorded since.
+// whole time it was offline (offline_inside_seconds). While the event runs the
+// session is reopened; once it has ended (up to OFFLINE_RESUME_AFTER_END_SECONDS
+// later) it is closed again at observed_at -- up to when the phone says it
+// stayed inside, capped at the event's end. Not for flagged records, or when
+// anything else was recorded since.
 const OFFLINE_RESUME_SLACK_SECONDS = 20; // request latency between the server's last ping and the phone's receipt of it
-async function resumeAfterOffline(record, claimRaw) {
+const OFFLINE_RESUME_AFTER_END_SECONDS = 7 * 24 * 60 * 60; // matches OFFLINE_CLAIM_GRACE_MS in the app
+async function resumeAfterOffline(record, claimRaw, observedAtRaw) {
   const claimSeconds = Number(claimRaw);
   if (!(claimSeconds > 0) || record.requires_face_verification) return null;
+  let observed = observedAtRaw ? new Date(observedAtRaw) : null;
+  if (!(observed?.getTime() <= Date.now() + HEARTBEAT_OBSERVED_AT_FUTURE_SKEW_MS)) observed = null;
 
-  const [[[check]], [[lastLog]], [[lastSession]]] = await Promise.all([
+  const [[[check]], [[lastLog]], [[lastSession]], [[finalizedLog]]] = await Promise.all([
     pool.query(
-      `SELECT (NOW() - INTERVAL ? SECOND) <= (a.time_out + INTERVAL ? SECOND) AS covered, e.end_datetime > NOW() AS running
+      `SELECT (NOW() - INTERVAL ? SECOND) <= (a.time_out + INTERVAL ? SECOND) AS covered, e.end_datetime > NOW() AS running,
+              e.end_datetime > NOW() - INTERVAL ? SECOND AS recently_ended,
+              LEAST(e.end_datetime, ?) AS close_at, LEAST(e.end_datetime, ?) > a.time_out AS stayed_longer
        FROM attendance a JOIN events e ON e.id = a.event_id WHERE a.id = ?`,
-      [Math.ceil(claimSeconds), OFFLINE_RESUME_SLACK_SECONDS, record.id]
+      [Math.ceil(claimSeconds), OFFLINE_RESUME_SLACK_SECONDS, OFFLINE_RESUME_AFTER_END_SECONDS, observed, observed, record.id]
     ),
-    pool.query('SELECT action, details FROM attendance_logs WHERE attendance_id = ? ORDER BY id DESC LIMIT 1', [record.id]),
-    pool.query('SELECT * FROM attendance_sessions WHERE attendance_id = ? ORDER BY time_in DESC, id DESC LIMIT 1', [record.id])
+    // status_finalized is written after the event ends, so it doesn't count as "recorded since".
+    pool.query(
+      `SELECT action, details FROM attendance_logs WHERE attendance_id = ? AND action <> 'status_finalized' ORDER BY id DESC LIMIT 1`,
+      [record.id]
+    ),
+    pool.query('SELECT * FROM attendance_sessions WHERE attendance_id = ? ORDER BY time_in DESC, id DESC LIMIT 1', [record.id]),
+    pool.query(
+      `SELECT details FROM attendance_logs WHERE attendance_id = ? AND action = 'status_finalized' ORDER BY id DESC LIMIT 1`,
+      [record.id]
+    )
   ]);
-  if (!check?.covered || !check.running) return null;
+  if (!check?.covered) return null;
+  if (!check.running && !(check.recently_ended && check.stayed_longer)) return null;
   let reason = null;
   try { reason = JSON.parse(lastLog?.details || '{}').reason; } catch (e) { /* not JSON */ }
   if (lastLog?.action !== 'auto_time_out' || reason !== 'no_signal') return null;
   if (!lastSession || !lastSession.auto_ended || lastSession.time_out !== record.time_out) return null;
 
   const sessionSeconds = Number(lastSession.duration_seconds) || 0;
+  if (!check.running) return extendAfterEventEnd(record, lastSession, sessionSeconds, check.close_at, claimSeconds, finalizedLog);
   const [reopened] = await pool.query(
     `UPDATE attendance SET time_out = NULL,
        total_duration_seconds = GREATEST(0, COALESCE(total_duration_seconds, 0) - ?),
@@ -1459,6 +1507,48 @@ async function resumeAfterOffline(record, claimRaw) {
   return fresh;
 }
 
+// The event ended before the phone was back online: the no_signal session is
+// stretched to closeAt instead of reopened, and an already-settled status is
+// settled again with the new total.
+async function extendAfterEventEnd(record, lastSession, sessionSeconds, closeAt, claimSeconds, finalizedLog) {
+  const [extended] = await pool.query(
+    `UPDATE attendance SET time_out = ?,
+       total_duration_seconds = GREATEST(0, COALESCE(total_duration_seconds, 0) - ?) + GREATEST(0, TIMESTAMPDIFF(SECOND, ?, ?)),
+       work_hours = ROUND(total_duration_seconds / 3600, 2)
+     WHERE id = ? AND time_out = ?`,
+    [closeAt, sessionSeconds, lastSession.time_in, closeAt, record.id, record.time_out]
+  );
+  if (!extended.affectedRows) return null;
+  await pool.query(
+    'UPDATE attendance_sessions SET time_out = ?, duration_seconds = GREATEST(0, TIMESTAMPDIFF(SECOND, time_in, ?)) WHERE id = ?',
+    [closeAt, closeAt, lastSession.id]
+  );
+
+  // Undo the end-of-event presence rule's verdict so it runs again on the new total.
+  let previousStatus = null;
+  try { previousStatus = JSON.parse(finalizedLog?.details || '{}').previousStatus; } catch (e) { /* not JSON */ }
+  const refinalize = !!record.status_finalized && !!previousStatus;
+  if (refinalize) {
+    await pool.query('UPDATE attendance SET attendance_status = ?, status_finalized = 0 WHERE id = ?', [previousStatus, record.id]);
+  }
+  await pool.query(
+    `INSERT INTO attendance_logs (attendance_id, employee_id, action, details) VALUES (?, ?, 'resumed_after_offline', ?)`,
+    [record.id, record.employee_id, JSON.stringify({ previousTimeOut: record.time_out, timeOut: closeAt, offlineInsideSeconds: Math.round(claimSeconds), afterEventEnd: true })]
+  );
+  await settleEndedEvents();
+  if (refinalize) await recalculateAllRatings(record.employee_id);
+
+  realtime.broadcastNow('attendance-status');
+  realtime.notifyEmployee(record.employee_id, 'attendance');
+  console.log(`[attendance] Extended attendance #${record.id} to ${closeAt}: the phone was offline but stayed inside (${Math.round(claimSeconds)} s).`);
+  afterResponse('offline resume follow-up', () => pool.query(
+    `INSERT INTO notifications (employee_id, title, message, type) VALUES (?, 'Attendance Updated', ?, 'attendance_auto_end')`,
+    [record.employee_id, 'Your phone lost its internet connection, but it stayed inside the event area, so that time was added to your attendance.']
+  ));
+  const [[fresh]] = await pool.query('SELECT * FROM attendance WHERE id = ?', [record.id]);
+  return fresh;
+}
+
 async function heartbeat(req, res, next) {
   try {
     const { id } = req.params;
@@ -1473,7 +1563,7 @@ async function heartbeat(req, res, next) {
     let record = rows[0];
     if (!record) return res.status(404).json({ success: false, message: 'Attendance record not found.' });
     // Timed out while offline but stayed inside: reopen, then handle this ping normally.
-    if (record.time_out) record = (await resumeAfterOffline(record, req.body.offline_inside_seconds)) || record;
+    if (record.time_out) record = (await resumeAfterOffline(record, req.body.offline_inside_seconds, observed_at)) || record;
     if (locationOff) {
       // The phone may never have had a fix to send -- fall back to the last
       // position the server already has for this session.

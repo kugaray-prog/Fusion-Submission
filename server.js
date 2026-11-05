@@ -82,6 +82,10 @@ const apiLimiter = rateLimit({
 
   max: 1000,
 
+  // Sign-in and registration requests carry no token yet, so they would all
+  // share the campus Wi-Fi's IP here; those routes have their own limiters.
+  skip: (req) => req.path.startsWith('/employee-auth/') && req.path !== '/employee-auth/device-status',
+
   standardHeaders: true,
   legacyHeaders: false,
 

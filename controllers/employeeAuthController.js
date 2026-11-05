@@ -5,6 +5,7 @@ const config = require('../config/config');
 const { logAction } = require('../services/auditService');
 const { notifyAdmins, employeeLabel, deviceLabel } = require('../services/adminNotificationService');
 const faceService = require('../services/faceService');
+const faceEmbeddingCache = require('../services/faceEmbeddingCache');
 
 // Failed face matches allowed before new-device registration is locked, and lock duration.
 const DOUBLESAFE_MAX_ATTEMPTS = 3;
@@ -248,6 +249,7 @@ async function resolveDepartmentId(deptInput) {
 // A new device for an employee with a face on file must match that face first
 // (DoubleSafe); repeated failures lock registration for DOUBLESAFE_LOCK_MINUTES.
 async function linkDevice(req, res, next) {
+  let releaseFace = null;
   try {
     const imageFile = req.files?.image?.[0];
     const videoFile = req.files?.video?.[0];
@@ -325,6 +327,9 @@ async function linkDevice(req, res, next) {
     try {
       embedding = await faceService.getEmbedding(imageFile.path);
     } catch (err) {
+      if (faceService.isBusyError(err)) {
+        return res.status(503).json({ success: false, result: 'server_busy', message: err.message });
+      }
       console.error('Face processing failed:', err.message);
       return res.status(502).json({
         success: false,
@@ -334,16 +339,15 @@ async function linkDevice(req, res, next) {
 
     // One face, one account: reject if the face is enrolled to another employee
     // who still has a device.
-    const [otherFaceRows] = await pool.query(
-      `SELECT ef.employee_id, ef.embedding FROM employee_faces ef
-       WHERE ef.employee_id <> ?
-         AND EXISTS (SELECT 1 FROM mobile_devices md WHERE md.employee_id = ef.employee_id)`,
-      [employee ? employee.id : 0]
-    );
-    const faceOwner = faceService.findBestMatch(
-      embedding,
-      otherFaceRows.map((r) => ({ employeeId: r.employee_id, embedding: JSON.parse(r.embedding) }))
-    );
+    releaseFace = faceEmbeddingCache.reserve(embedding);
+    if (!releaseFace) {
+      return res.status(409).json({
+        success: false,
+        result: 'registration_in_progress',
+        message: 'A registration with this face is already in progress. Please wait a moment and try again.'
+      });
+    }
+    const faceOwner = await faceEmbeddingCache.findOtherOwner(embedding, employee ? employee.id : 0);
     if (faceOwner) {
       await logAction({
         adminId: null,
@@ -556,7 +560,16 @@ async function linkDevice(req, res, next) {
       deviceStatus
     });
   } catch (err) {
+    // Two simultaneous registrations raced on the same employee ID or device.
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({
+        success: false,
+        message: 'This employee ID or device was just registered by another request. Please sign in again.'
+      });
+    }
     next(err);
+  } finally {
+    if (releaseFace) releaseFace();
   }
 }
 

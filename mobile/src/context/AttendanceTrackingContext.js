@@ -20,7 +20,22 @@ import {
   stopBackgroundAttendance,
   ensureBackgroundPermission
 } from '../tasks/backgroundAttendance';
-import { noteServerHeard, noteReading, offlineInsideSeconds, forgetTrail, clearTrails } from '../utils/presenceTrail';
+import { noteServerHeard, noteReading, noteOutside, offlineInsideSeconds, offlineInsideRun, forgetTrail, clearTrails } from '../utils/presenceTrail';
+
+// 'YYYY-MM-DD HH:MM:SS' (server local time) -> ms, NaN when missing.
+function dateTimeMs(value) {
+  return new Date(String(value || '').replace(' ', 'T')).getTime();
+}
+
+// The offline-inside claim sent with a ping: { seconds, observedAt? }. Once the
+// event has ended, observedAt also says up to when the phone stayed inside
+// (at most the event's end), so the server can still count that time.
+async function offlineClaim(attendanceId, untilMs, endMs) {
+  if (!(endMs <= Date.now())) return { seconds: await offlineInsideSeconds(attendanceId, untilMs) };
+  const run = await offlineInsideRun(attendanceId);
+  if (!run) return {};
+  return { seconds: run.seconds, observedAt: new Date(Math.min(run.untilMs, endMs, untilMs)).toISOString() };
+}
 
 // Estimated boundary-crossing time, interpolated by each reading's distance to the edge.
 function estimateExitTimeMs(prev, now, points) {
@@ -47,6 +62,9 @@ const LIVE_POSITION_MIN_MS = 3000;
 const GEOFENCE_POLL_MS = 30000;
 // Outside readings needed before treating the employee as exited.
 const LOCAL_OUTSIDE_CONFIRM_READINGS = 1;
+// How long after an event ends an offline-inside claim is still sent
+// (the server's OFFLINE_RESUME_AFTER_END_SECONDS).
+const OFFLINE_CLAIM_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const AttendanceTrackingContext = createContext(null);
 
@@ -126,6 +144,12 @@ export function AttendanceTrackingProvider({ children }) {
 
   const deviceUid = useCallback(() => getDeviceUid(), []);
 
+  // An event's end (ms), from today's history or the geofence list.
+  const eventEndMs = (eventId) => {
+    const g = geofencesRef.current.find((x) => x.event_id === eventId);
+    return dateTimeMs(sessionsRef.current[eventId]?.event_end || g?.end_datetime);
+  };
+
   const stopHeartbeat = (attendanceId) => {
     if (heartbeatTimers.current[attendanceId]) {
       clearInterval(heartbeatTimers.current[attendanceId]);
@@ -157,16 +181,17 @@ export function AttendanceTrackingProvider({ children }) {
       }
       if (!usingPending && coords) lastSentPositionRef.current[attendanceId] = { ...coords, at: Date.now() };
       try {
+        const claim = await offlineClaim(attendanceId, usingPending ? Date.parse(pending.observedAt) : Date.now(), eventEndMs(eventId));
         const result = await sendHeartbeat(
           attendanceId,
           coords?.latitude,
           coords?.longitude,
-          usingPending ? pending.observedAt : undefined,
+          claim.observedAt || (usingPending ? pending.observedAt : undefined),
           {
             accuracy: coords?.accuracy,
             mocked: usingPending ? pending.mocked : mockedRef.current,
             locationOff: usingPending && pending.locationOff,
-            offlineInsideSeconds: await offlineInsideSeconds(attendanceId, usingPending ? Date.parse(pending.observedAt) : Date.now())
+            offlineInsideSeconds: claim.seconds
           }
         );
         if (result?.data && !result.data.ended && !result.data.ignored) noteServerHeard(attendanceId);
@@ -241,26 +266,31 @@ export function AttendanceTrackingProvider({ children }) {
     try {
       let history = await getMyHistory();
       const today = localDateString();
-      // Ask the server to undo a time-out made while offline but inside.
+      // Ask the server to undo a time-out made while offline but inside
+      // (even up to a week after the event ended: then it counts up to the end).
       const heldExitFor = (a) => {
         const p = pendingExitRef.current[a.event_id];
         return p && p.attendanceId === a.id ? p : null;
       };
+      const claimable = (r) => r.time_out
+        && (r.attendance_date === today || dateTimeMs(r.event_end) > Date.now() - OFFLINE_CLAIM_GRACE_MS);
       const resumable = [];
-      for (const a of (history.data || []).filter((r) => r.attendance_date === today && r.time_out)) {
+      for (const a of (history.data || []).filter(claimable)) {
         const p = heldExitFor(a);
-        const claim = await offlineInsideSeconds(a.id, p ? Date.parse(p.observedAt) : Date.now());
-        if (claim) resumable.push({ a, p, claim });
+        const claim = await offlineClaim(a.id, p ? Date.parse(p.observedAt) : Date.now(), dateTimeMs(a.event_end));
+        if (claim.seconds) resumable.push({ a, p, claim });
       }
       if (resumable.length) {
         await Promise.all(resumable.map(async ({ a, p, claim }) => {
-          const coords = p || locationRef.current;
+          const coords = p || locationRef.current || lastInsideRef.current[a.event_id];
+          // No position yet (just opened): tried again on the next refresh.
+          if (!coords && !p?.locationOff) return;
           try {
-            const result = await sendHeartbeat(a.id, coords?.latitude, coords?.longitude, p?.observedAt, {
+            const result = await sendHeartbeat(a.id, coords?.latitude, coords?.longitude, claim.observedAt || p?.observedAt, {
               accuracy: coords?.accuracy,
               mocked: p ? p.mocked : mockedRef.current,
               locationOff: !!p?.locationOff,
-              offlineInsideSeconds: claim
+              offlineInsideSeconds: claim.seconds
             });
             if (result?.data?.ended) {
               forgetTrail(a.id);
@@ -284,6 +314,7 @@ export function AttendanceTrackingProvider({ children }) {
           total_duration_seconds: a.total_duration_seconds,
           open_session_time_in: a.open_session_time_in,
           session_count: a.session_count,
+          event_end: a.event_end,
           // While set, the server has the duration clock stopped until the
           // employee passes face verification.
           requires_face_verification: !!a.requires_face_verification
@@ -427,6 +458,7 @@ export function AttendanceTrackingProvider({ children }) {
         autoCheckIn(g, coords, acc);
       } else if (!inside && hasOpenSession) {
         if (recheck) return;
+        noteOutside(existingSession.id, readingAt);
         const eventId = g.event_id;
         const streak = (localOutsideStreakRef.current[eventId] || 0) + 1;
         localOutsideStreakRef.current[eventId] = streak;
@@ -612,11 +644,12 @@ export function AttendanceTrackingProvider({ children }) {
       for (const [eventId, pending] of Object.entries(pendingExitRef.current)) {
         if (stopped || !pending.locationOff) continue;
         try {
-          const result = await sendHeartbeat(pending.attendanceId, pending.latitude, pending.longitude, pending.observedAt, {
+          const claim = await offlineClaim(pending.attendanceId, Date.parse(pending.observedAt), eventEndMs(eventId));
+          const result = await sendHeartbeat(pending.attendanceId, pending.latitude, pending.longitude, claim.observedAt || pending.observedAt, {
             accuracy: pending.accuracy,
             mocked: pending.mocked,
             locationOff: true,
-            offlineInsideSeconds: await offlineInsideSeconds(pending.attendanceId, Date.parse(pending.observedAt))
+            offlineInsideSeconds: claim.seconds
           });
           if (result?.data?.ended) {
             forgetTrail(pending.attendanceId);

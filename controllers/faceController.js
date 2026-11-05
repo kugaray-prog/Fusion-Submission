@@ -31,6 +31,9 @@ async function verifyFace(req, res, next) {
     try {
       embedding = await faceService.getEmbedding(req.file.path);
     } catch (err) {
+      if (faceService.isBusyError(err)) {
+        return res.status(503).json({ success: false, result: 'server_busy', message: err.message });
+      }
       console.error('Face verification failed:', err.message);
       return res.status(502).json({
         success: false,

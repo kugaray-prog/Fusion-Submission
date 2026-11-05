@@ -1,4 +1,5 @@
 const fs = require('fs');
+const os = require('os');
 const sharp = require('sharp');
 const config = require('../config/config');
 
@@ -10,7 +11,12 @@ const config = require('../config/config');
 let ort = null;
 
 // Disabling the CPU memory arena roughly halves memory use with no measurable slowdown.
-const SESSION_OPTIONS = { enableCpuMemArena: false, enableMemPattern: false };
+// Each concurrent run gets its share of the cores instead of all of them.
+const SESSION_OPTIONS = {
+  enableCpuMemArena: false,
+  enableMemPattern: false,
+  intraOpNumThreads: Math.max(1, Math.floor(os.cpus().length / config.face.maxConcurrency))
+};
 let detectorSessionPromise = null;
 let recognizerSessionPromise = null;
 
@@ -351,7 +357,45 @@ async function embedAlignedFace(rawRgbBuffer) {
 }
 
 /** Detect, align and embed. Throws a user-facing error when no face is found. */
+// Limits how many photos are decoded and run through the models at once, so a
+// burst (e.g. everyone registering at the same time) queues instead of
+// exhausting CPU and memory.
+let activeJobs = 0;
+const waitingJobs = [];
+
+function acquireSlot() {
+  if (activeJobs < config.face.maxConcurrency) {
+    activeJobs++;
+    return Promise.resolve();
+  }
+  if (waitingJobs.length >= config.face.maxQueue) {
+    const err = new Error('The face-recognition server is busy. Please try again in a minute.');
+    err.code = 'FACE_BUSY';
+    return Promise.reject(err);
+  }
+  return new Promise((resolve) => waitingJobs.push(resolve));
+}
+
+function releaseSlot() {
+  const next = waitingJobs.shift();
+  if (next) next();
+  else activeJobs--;
+}
+
+function isBusyError(err) {
+  return !!err && err.code === 'FACE_BUSY';
+}
+
 async function getEmbedding(imagePath) {
+  await acquireSlot();
+  try {
+    return await computeEmbedding(imagePath);
+  } finally {
+    releaseSlot();
+  }
+}
+
+async function computeEmbedding(imagePath) {
   const image = await loadImage(imagePath);
   const face = await detectFace(image);
   if (!face || !face.kps) {
@@ -390,6 +434,7 @@ function warmUp() {
 
 module.exports = {
   getEmbedding,
+  isBusyError,
   warmUp,
   cosineSimilarity,
   findBestMatch

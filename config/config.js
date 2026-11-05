@@ -42,7 +42,11 @@ module.exports = {
     modelPath: process.env.FACE_MODEL_PATH || path.join(__dirname, '..', 'models', 'w600k_mbf.onnx'),
     inputSize: Number(process.env.FACE_INPUT_SIZE) || 112, // ArcFace/InsightFace recognizers expect 112x112 aligned faces
     // Cosine similarity at or above which two faces are the same person.
-    matchThreshold: Number(process.env.FACE_MATCH_THRESHOLD) || 0.5
+    matchThreshold: Number(process.env.FACE_MATCH_THRESHOLD) || 0.5,
+    // Face photos processed at once; the rest wait in a queue. Requests beyond
+    // maxQueue are turned away (503) instead of timing out on the phone.
+    maxConcurrency: Number(process.env.FACE_MAX_CONCURRENCY) || 2,
+    maxQueue: Number(process.env.FACE_MAX_QUEUE) || 300
   },
   attendance: {
     // Minutes after start that a time-in still counts as Present.

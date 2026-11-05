@@ -7,7 +7,7 @@ import { getDeviceUid } from '../utils/device';
 import { isInsideGeofence, isEventActiveNow, localDateString } from '../utils/geofence';
 import { alertFaceVerificationRequired } from '../utils/faceVerificationAlert';
 import Notifications from '../utils/notificationsModule';
-import { noteServerHeard, noteReading, offlineInsideSeconds, forgetTrail } from '../utils/presenceTrail';
+import { noteServerHeard, noteReading, noteOutside, offlineInsideSeconds, forgetTrail } from '../utils/presenceTrail';
 
 // Background attendance (app backgrounded or closed), via an Android foreground
 // service. Per reading: time in when inside with no session, keep-alive pings
@@ -166,6 +166,7 @@ async function handleReading(loc) {
     if (session?.id && session.open) {
       let exit = state.pendingExits[eventId];
       if (exit && exit.attendanceId !== session.id) exit = null;
+      if (!inside) await noteOutside(session.id, loc.timestamp || now);
       if (!inside && !exit) {
         exit = { attendanceId: session.id, observedAt, latitude, longitude, accuracy, mocked };
         state.pendingExits[eventId] = exit;

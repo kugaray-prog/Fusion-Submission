@@ -9,7 +9,7 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || 'geoattend_root',
   database: process.env.DB_NAME || 'geoattend',
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: Number(process.env.DB_CONNECTION_LIMIT) || 25,
   queueLimit: 0,
   dateStrings: true,
   // Keep-alive and a short idleTimeout reduce the chance of being handed a
