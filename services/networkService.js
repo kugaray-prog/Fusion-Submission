@@ -113,10 +113,17 @@ function isAllowed(ip, entries) {
   return buildBlockList(entries).check(ip, family === 4 ? 'ipv4' : 'ipv6');
 }
 
+// Every heartbeat checks the list, so it's cached briefly; a save clears it.
+const ENTRIES_TTL_MS = 10 * 1000;
+let entriesCache = { entries: null, at: 0 };
+
 async function getAllowedEntries() {
+  if (entriesCache.entries && Date.now() - entriesCache.at < ENTRIES_TTL_MS) return entriesCache.entries;
   const [rows] = await pool.query('SELECT setting_value FROM settings WHERE setting_key = ?', [SETTING_KEY]);
   const raw = rows[0] ? rows[0].setting_value : process.env.ALLOWED_NETWORK_IPS;
-  return splitEntries(raw);
+  const entries = splitEntries(raw);
+  entriesCache = { entries, at: Date.now() };
+  return entries;
 }
 
 async function saveAllowedEntries(entries) {
@@ -125,6 +132,14 @@ async function saveAllowedEntries(entries) {
      ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
     [SETTING_KEY, entries.join('\n')]
   );
+  entriesCache = { entries: null, at: 0 };
 }
 
-module.exports = { getClientIp, resolveClientIp, splitEntries, validateEntry, isAllowed, getAllowedEntries, saveAllowedEntries };
+// True when the request comes from the office network, or no allowed IP is set (check off).
+async function isOfficeNetwork(req) {
+  const entries = await getAllowedEntries();
+  if (!entries.length) return true;
+  return isAllowed(await resolveClientIp(req), entries);
+}
+
+module.exports = { getClientIp, resolveClientIp, splitEntries, validateEntry, isAllowed, getAllowedEntries, saveAllowedEntries, isOfficeNetwork };

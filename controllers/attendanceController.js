@@ -7,6 +7,12 @@ const { logAction } = require('../services/auditService');
 const { notifyAdmins, employeeLabel, deviceLabel } = require('../services/adminNotificationService');
 const realtime = require('../services/realtime');
 const eventAudience = require('../services/eventAudience');
+const networkService = require('../services/networkService');
+
+// Sent when the phone isn't on the office Wi-Fi (services/networkService.js).
+function wrongNetwork(res, message) {
+  return res.status(403).json({ success: false, code: 'WRONG_NETWORK', message });
+}
 
 // `mocked` as sent by the mobile app (Android's mock-location flag).
 function isMockedLocation(mocked) {
@@ -653,6 +659,9 @@ async function submitAttendance(req, res, next) {
         code: 'MOCK_LOCATION',
         message: 'A fake/mock GPS location was detected. Turn off any location-spoofing app and try again.'
       });
+    }
+    if (!(await networkService.isOfficeNetwork(req))) {
+      return wrongNetwork(res, 'You are not connected to the office Wi-Fi. Connect to it to time in.');
     }
 
     // Every lookup the checks below need, fetched together: the database is
@@ -1557,6 +1566,12 @@ async function heartbeat(req, res, next) {
     const locationOff = req.body.location_off === true || req.body.location_off === 'true';
     if (!locationOff && (latitude === undefined || longitude === undefined)) {
       return res.status(400).json({ success: false, message: 'latitude and longitude are required.' });
+    }
+    // Off the office Wi-Fi the phone counts as offline: nothing is recorded,
+    // the session times out for silence, and the phone's offline-inside claim
+    // is accepted once it's back on the office Wi-Fi (resumeAfterOffline).
+    if (!(await networkService.isOfficeNetwork(req))) {
+      return wrongNetwork(res, 'Not on the office Wi-Fi: attendance will sync once you reconnect to it.');
     }
 
     const [rows] = await pool.query('SELECT * FROM attendance WHERE id = ? AND employee_id = ?', [id, req.employee.id]);

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
+import * as Network from 'expo-network';
 import { useAuth } from './AuthContext';
 import { useLocationStatus } from './LocationStatusContext';
 import { getGeofences, registerDevice, submitAttendance, sendHeartbeat, getMyHistory } from '../api/client';
@@ -523,6 +524,20 @@ export function AttendanceTrackingProvider({ children }) {
     if (!trackingEnabled) return undefined;
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') refreshSessionsFromHistoryRef.current?.();
+    });
+    return () => sub.remove();
+  }, [trackingEnabled]);
+
+  // The server refuses pings off the office Wi-Fi (WRONG_NETWORK), so time
+  // spent inside meanwhile is held as an offline claim. Re-sync whenever the
+  // phone joins a Wi-Fi network so the claim is sent right away, even after
+  // the event has ended.
+  useEffect(() => {
+    if (!trackingEnabled) return undefined;
+    const sub = Network.addNetworkStateListener(({ type, isConnected }) => {
+      if (type === Network.NetworkStateType.WIFI && isConnected !== false) {
+        refreshSessionsFromHistoryRef.current?.();
+      }
     });
     return () => sub.remove();
   }, [trackingEnabled]);
