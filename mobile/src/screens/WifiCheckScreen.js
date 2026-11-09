@@ -94,6 +94,12 @@ export default function WifiCheckScreen() {
           </View>
         )}
 
+        {phase === 'matched' && (
+          <TouchableOpacity style={styles.btnGold} onPress={() => markWifiVerified()}>
+            <Text style={styles.btnGoldText}>Done</Text>
+          </TouchableOpacity>
+        )}
+
         {phase === 'mismatch' && (
           <View style={[styles.statusBanner, { backgroundColor: '#FEE2E2' }]}>
             <Text style={[styles.statusBannerText, { color: colors.error }]}>
